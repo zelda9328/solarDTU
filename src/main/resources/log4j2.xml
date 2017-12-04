@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="warn">
+
+<Appenders>
+    <Console name="console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+    </Console>
+    
+    <!--  OPTION#1: Use standard syslog and add fields with LoggerFields -->
+    <Syslog name="syslog" format="RFC5424" host="localhost" port="514"
+            protocol="UDP" appName="solar" includeMDC="false" mdcId="testlog4j"
+            facility="LOCAL6" enterpriseNumber="18060" newLine="false"
+            messageId="Audit">
+            <LoggerFields>
+                  <KeyValuePair key="thread" value="%t"/>
+                  <KeyValuePair key="priority" value="%p"/>
+                  <KeyValuePair key="category" value="%c"/>
+                  <KeyValuePair key="exception" value="%ex"/>
+            </LoggerFields>
+                        
+    </Syslog>
+            
+    <!--  OPTION#2: Use socket with explicit pattern -->
+    <Socket name="syslogsocket" host="localhost" port="514" protocol="UDP">
+          <PatternLayout
+        pattern="&lt;134&gt;%d{MMM dd HH:mm:ss} ${hostName} testlog4j: {
+              &quot;thread&quot;:&quot;%t&quot;,
+              &quot;priority&quot;:&quot;%p&quot;,
+              &quot;category&quot;:&quot;%c{1}&quot;,
+              &quot;exception&quot;:&quot;%exception&quot;
+              }%n"
+          />
+    </Socket>
+    
+    <SMTP name="Mail" subject="Error Log" to="engineer2@chu-an.com" from="gmiwzt@logging.apache.org"
+          smtpHost="168.95.4.211" smtpPort="25" bufferSize="50">
+    </SMTP>
+            
+</Appenders>
+
+<Loggers>
+    <Root level="info">
+      <AppenderRef ref="console"/>
+      <AppenderRef ref="syslog" level="warn" />
+      <Appenderref ref="Mail" level="fatal"/>
+    </Root>
+</Loggers>    
+  
+</Configuration>
