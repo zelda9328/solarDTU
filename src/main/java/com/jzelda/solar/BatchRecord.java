@@ -5,6 +5,10 @@
  */
 package com.jzelda.solar;
 
+import com.jzelda.solar.pattern.DataModel;
+import com.jzelda.solar.pattern.Day1;
+import com.jzelda.solar.pattern.DeltaInverterModbus;
+import com.jzelda.solar.pattern.Immediate;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
@@ -13,13 +17,15 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;;
 import java.util.Map;
-import java.util.Timer;
+import java.util.Optional;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 /**
  *
@@ -32,7 +38,6 @@ public class BatchRecord extends TimerTask {
     int amount;
     
     Map<Integer, Object[]> elements;
-    Timer timer;
     //timer is isset?
     Boolean isset;
     ScheduledExecutorService service;
@@ -41,12 +46,71 @@ public class BatchRecord extends TimerTask {
         this.name = factor.name;        
         amount = factor.inverterIdList.size();
         elements = new HashMap();
-        timer = new Timer(this.name);
         service = Executors.newScheduledThreadPool(1);
         isset = false;
     }
     
-    void addElements(Object[] o){
+    private String getStoreString(Class c){
+        Class dataProperty = c;
+        String sql = null;
+        
+        switch(dataProperty.getSimpleName()){
+            case "Day1":
+                sql = "insert into historyPow(no, power) "
+                        + "select ?,? from dual where ? not in "
+                        + "(select date_format(date, \"%Y/%m/%d\") from historyPow where no=?)";
+                break;
+                
+            case "Day30":
+                
+                break;
+                
+            case "Immediate":
+                sql = "insert into immediate "
+                        + "(no,voltageDC,currentDC,voltageAC,currentAC,wattage,frequency,todayWatt,ambTemp,boostHsTemp,invHsTemp,stamp) "
+                        + "values(?,?,?,?,?,?,?,?,?,?,?,?)";
+                break;
+        }
+        
+        return sql;
+    }
+    
+    private void toSave(DeltaInverterModbus model){
+        String storeSql = getStoreString(model.getClass());
+        Object[] data = model.getDataSet();
+        
+        Calendar cal = Calendar.getInstance();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
+        String date_str  = sdf.format(cal.getTime());
+        
+        try (PreparedStatement ps = Env.conn.prepareStatement(storeSql)){
+            for(int i=0; i<data.length; i++){
+                cal.add(Calendar.DATE, -1);
+                
+                int x = 4;
+                int y = 0;
+                ps.setObject(1, model.getInverterNo());
+                ps.setObject(2, data[i]);
+                ps.setObject(3, date_str);
+                if(model.getClass().getSimpleName().equals("Day30")){
+                    y =1;
+                    ps.setObject(x, date_str);
+                }                
+                ps.setObject(x+y, model.getInverterNo());
+                
+                ps.execute();
+                Env.conn.commit();
+            }
+        } catch (SQLException ex) {
+            Env.logger.warn("sql execute error, message: " + ex.getMessage());
+        }
+        
+        
+        
+        
+    }
+    
+    public void addElements(Object[] o){
         if(o.length != dbStructFields){
             Env.logger.warn("data length waiting write into DB is not correct.");
             return;
@@ -95,6 +159,31 @@ public class BatchRecord extends TimerTask {
         */
     }
     
+    public void addElements(DataModel model){
+        String classType = model.getClass().getSimpleName();
+        
+        switch(classType){
+            case "Day1":
+            case "Day30":
+                DeltaInverterModbus day = (DeltaInverterModbus)model;
+                day.parseField();
+                toSave(day);
+                break;
+                
+            case "Immediate":
+                Immediate immediate = (Immediate)model;
+                immediate.parseField();
+                int id = immediate.getInverterNo();
+                Object[] obj = immediate.getDataSet();                
+                obj[0] = id;                
+                addElements( obj );
+                break;
+                
+            case "UnDefined":
+                break;
+        }
+    }
+    
     void batchWrite(){        
         if(elements.size() == 0){
             isset = false;
@@ -106,9 +195,8 @@ public class BatchRecord extends TimerTask {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
                 Calendar now = Calendar.getInstance();
                 String nowStr = sdf.format(now.getTime());
+
         try (PreparedStatement ps = Env.conn.prepareStatement(sql);){
-            
-            
             for(Object[] collection : elements.values()){
                 int i = 1;
                 for(Object o : collection){
@@ -125,7 +213,7 @@ public class BatchRecord extends TimerTask {
         } catch (SQLException ex) {
             Env.logger.warn("sql execute error, message: " + ex.getMessage());
         }
-        
+
         Env.logger.info(name + " timer execute has over.");
         elements = new HashMap();
         isset = false;
@@ -141,7 +229,6 @@ public class BatchRecord extends TimerTask {
             isset = true;
         }
         Env.logger.info(name + " set timer");
-        //timer.schedule(this, Env.cmdSendPeriod * 4 * 1000 +20000);
         service.schedule(this, Env.cmdSendPeriod*4 +20, TimeUnit.SECONDS);
         //timer.cancel();
     }
@@ -149,9 +236,5 @@ public class BatchRecord extends TimerTask {
     @Override
     public void run() {
         batchWrite();
-    }
-    
-    protected void finalize() throws Throwable {
-        timer.cancel();
     }
 }

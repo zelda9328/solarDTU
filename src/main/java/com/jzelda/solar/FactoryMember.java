@@ -23,4 +23,15 @@ public class FactoryMember {
         sendMonitor = new ConcurrentHashMap<Integer, BatchRecord>();
         inverterIdList = new ArrayList();
     }
+    
+    public int mapId(int id){
+        if(id <= inverterIdList.size())
+            return inverterIdList.get(id -1);
+        else
+            return -1;
+    }
+    
+    public String getName(){
+        return name;
+    }
 }

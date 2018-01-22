@@ -39,7 +39,7 @@
 </Appenders>
 
 <Loggers>
-    <Root level="info">
+    <Root level="debug">
       <AppenderRef ref="console"/>
       <AppenderRef ref="syslog" level="warn" />
       <Appenderref ref="Mail" level="fatal"/>

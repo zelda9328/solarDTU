@@ -6,6 +6,15 @@
 package com.jzelda.solar;
 
 import com.jzelda.math.crc.CRC16_IBM;
+import com.jzelda.solar.pattern.Convert;
+import com.jzelda.solar.pattern.DataModel;
+import com.jzelda.solar.pattern.Day1;
+import com.jzelda.solar.pattern.Day30;
+import com.jzelda.solar.pattern.HeartBeat;
+import com.jzelda.solar.pattern.Immediate;
+import com.jzelda.solar.pattern.ModbusFunc6;
+import com.jzelda.solar.pattern.RegPack;
+import com.jzelda.solar.pattern.UnDefined;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -18,6 +27,7 @@ import java.util.Calendar;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.xml.bind.DatatypeConverter;
 
 /**
  *
@@ -26,12 +36,26 @@ import java.util.logging.Logger;
 public class DTU_Handler implements Runnable{
     static int baseDataLeng = 10;
     //function code 03 data length
-    static int minLEng = 7;
-    static int heartbeat = 3;
+    static int minLEng = 7;    
+    final static int heartbeat = 3;
+    final static int Func6 = 18;
+    final static int YeserdaySize = 19;
+    final static int Reg = 21;
+    final static int Immediate = 69;
+    final static int DAY30Size = 75;
+    final static byte[] HeartBeatValue = {0x31, 0x32, 0x33};
+    final static int ModbusLengPos = 12;
+    final static int RegPackLeng = 10;
+    final static int ModbusIdLeng = 1;
+    final static int ModbusFuncLeng = 1;
+    final static int ModbusInstructDataLeng = 1;
+    final static int CRCLeng = 2;
+    final static long CmdExpired = 300;
     
     SocketChannel socket;
-    ByteBuffer buffer;
+    ByteBuffer buffer, dataBuf;
     String ip;
+    byte[] regName = {0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20};
     Calendar lastTime;
     
     DTU_Handler(SocketChannel s){
@@ -41,23 +65,82 @@ public class DTU_Handler implements Runnable{
         } catch( IOException e){
             Env.logger.error("socket get address fail.");
         }
-        buffer = ByteBuffer.allocate(256*1024);
+        buffer = ByteBuffer.allocate(1024);
         buffer.clear();
+        dataBuf = ByteBuffer.allocate(4*1024);
+        dataBuf.clear();
         
         lastTime = Calendar.getInstance();
     }
 
     @Override
     public void run(){
-        Env.socketReadAgnet(socket, buffer);
+        Calendar nowTime = Calendar.getInstance();
+        long timeGap = nowTime.getTimeInMillis() - lastTime.getTimeInMillis();
+        if(timeGap > CmdExpired){
+            dataBuf.clear();
+        }
+        lastTime = nowTime;
         
+        Env.socketReadAgnet(socket, buffer);        
         buffer.flip();
-
-        int bufferLeng = buffer.limit();
-        byte[] data = new byte[bufferLeng];
-        buffer.get(data, 0, bufferLeng);
+        
+        byte[] data = new byte[buffer.remaining()];
+        buffer.get(data, 0, data.length);
         buffer.clear();
-        save(data);
+        
+        Env.logger.debug(String.format("receive socket channel data: %s", Convert.toStringType(data)));
+        
+        String msgHex = DatatypeConverter.printHexBinary(data);
+        String trimFlag = DatatypeConverter.printHexBinary(regName);
+        String[] trimReg = msgHex.split(trimFlag);
+        String noRegNameCmd = "";
+        for(String s : trimReg){
+            noRegNameCmd = noRegNameCmd.concat(s);
+        }
+        byte[] noRegData = DatatypeConverter.parseHexBinary(noRegNameCmd);
+        
+        if(data.length != Reg){
+            if( !Arrays.equals(data, HeartBeatValue)){
+                if(dataBuf.position() != 0){
+                    dataBuf.flip();
+                    byte[] lastData = new byte[dataBuf.remaining()];
+                    dataBuf.get(lastData);
+                    dataBuf.limit(dataBuf.capacity());
+
+                    Env.logger.debug(String.format("last remaining data: %s", Convert.toStringType(lastData)));
+                    Env.logger.debug(String.format("receive data: %s", Convert.toStringType(noRegData)));
+                    dataBuf.put(noRegData, 0, noRegData.length);
+                } else{
+                    dataBuf.put(noRegData);
+                }
+
+                int modbusDataLeng = (int)dataBuf.get(ModbusLengPos-10);
+                int fullMOdbusLeng = ModbusIdLeng + ModbusFuncLeng
+                        + ModbusInstructDataLeng + modbusDataLeng + CRCLeng;
+                if( dataBuf.position() >= fullMOdbusLeng){
+                    dataBuf.flip();
+                    data = new byte[dataBuf.remaining() + RegPackLeng];
+                    System.arraycopy(regName, 0, data, 0, regName.length);
+                    dataBuf.get(data, RegPackLeng, dataBuf.remaining());
+                    dataBuf.clear();
+
+                } else return;
+            }
+
+        }
+        
+        Env.logger.debug(String.format("data class context: %s",Convert.toStringType(data)));
+        DataModel model = getDataModel(data);
+        
+        
+        model.analyze();
+        String factoryName = model.fromWhere();
+        Env.logger.info("receive data type class: " + model.getClass().getSimpleName());
+        Env.logger.info(String.format("%s, the contenet is: %s",factoryName, Convert.toStringType(data)));
+        if(factoryName == null) return;
+        packingRelation(factoryName);
+        Env.getBatchRecord(factoryName).addElements(model);
     }
     
     public void run1() {
@@ -105,6 +188,8 @@ public class DTU_Handler implements Runnable{
         if(member.socket == null || !member.socket.isOpen()){
             Env.logger.info(String.format("socket:%s associate with %s.",
                 ip, member.name));
+            byte[] name_byte = member.name.getBytes();
+            System.arraycopy(name_byte, 0, regName, 0, name_byte.length);
             member.socket = this.socket;
         } else {
             try {
@@ -123,65 +208,15 @@ public class DTU_Handler implements Runnable{
         }
     }
     
-    public static String toHex(byte b){
-return (""+"0123456789ABCDEF".charAt(0xf&b>>4)+"0123456789ABCDEF".charAt(b&0xf));} 
+     
     
     void save(byte[] data){
-        if(data.length != DTU_Handler.heartbeat
-                && data.length < DTU_Handler.baseDataLeng+DTU_Handler.minLEng){
-            //資料長度不符預期
-            Env.logger.info("receive data format leng error");
-            return;
-        }
+        
         
         lastTime = Calendar.getInstance();        
-        if(data.length == DTU_Handler.heartbeat){
-            Env.logger.info("receive heartbeat from " + ip);
-            return;
-        }
         
-        byte[] slaveName_ori = Arrays.copyOfRange(data, 0, 9);
-        String slaveName = new String(slaveName_ori).trim();
-        packingRelation(slaveName);
         
-        byte[] modbus = Arrays.copyOfRange(data, 10, data.length-2);
-        int crc =  CRC16_IBM.getCRC(modbus);
-        byte crcH = (byte)((crc & 0xff00) >> 8);
-        //byte a = crcH.byteValue();
-        byte crcL = (byte)(crc & 0xff);
-        if(crcL != data[data.length-2]
-                || crcH != data[data.length-1]){
-            //crc is different
-            String msg = String.format("CRC check error from %s", slaveName);
-            Env.logger.warn(msg);
-            return;
-        }
-        //byte[] id_ori = Arrays.copyOfRange(data, 10, 10);
-        int id = (int)data[10];
-        String msg = String.format("data is from id => %d, factory => %s", id, slaveName);
-        Env.logger.info(msg);
         
-        int inverterId = 0;
-        for(FactoryMember m : Env.factories){
-            if(m.name.equals(slaveName)){
-                inverterId = m.inverterIdList.get(id -1);
-                //inverterId = id + m.shift;
-            }
-        }
-        Env.logger.info(String.format("transfer id to db index: %d", inverterId));
-        //byte[] func_ori = Arrays.copyOfRange(data, 11, 11);
-        int func = (int)data[11];
-                
-        
-        switch(func){
-            case 4:                
-                int dataLeng = (int)data[12];
-                savePowerData(Arrays.copyOfRange(data, 13, 13+dataLeng), inverterId, slaveName);
-            
-            case 1:
-                
-                break;
-        }
         
     }
     
@@ -271,13 +306,50 @@ return (""+"0123456789ABCDEF".charAt(0xf&b>>4)+"0123456789ABCDEF".charAt(b&0xf))
             Env.logger.warn(msg);
         }
         for(int i=1; i<pow.length;i+=2){
-            String msg = String.format("socket power data; %s %S", toHex(pow[i]), toHex(pow[i-1]));
+            String msg = String.format("socket power data; %s %S", Convert.toHex(pow[i]), Convert.toHex(pow[i-1]));
             Env.logger.info(msg);
             double rate = Math.pow(16, (i-1)*2);
             sum += (Byte.toUnsignedInt(pow[i]))* rate;
             sum += (Byte.toUnsignedInt(pow[i-1]))* rate * 16*16;
         }
         return (int)sum;
+    }
+    
+    private DataModel getDataModel(byte[] data){
+        DataModel dataModel = null;
+        
+        switch(data.length){
+            case DTU_Handler.heartbeat:
+                dataModel = new HeartBeat();
+                break;
+                
+            case DTU_Handler.YeserdaySize:
+                dataModel = new Day1();
+                break;
+                
+            case DTU_Handler.Immediate:
+                dataModel = new Immediate();
+                break;
+                
+            case DTU_Handler.DAY30Size:
+                dataModel = new Day30();
+                break;
+                
+            case DTU_Handler.Func6:
+                dataModel = new ModbusFunc6();
+                break;
+                
+            case DTU_Handler.Reg:
+                dataModel = new RegPack();
+                break;
+                
+            default:
+                dataModel = new UnDefined();
+                break;
+        }
+        
+        dataModel.set(data);
+        return dataModel;
     }
     
     protected void finalize() throws Throwable {

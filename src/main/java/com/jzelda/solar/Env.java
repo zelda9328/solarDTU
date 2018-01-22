@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.channels.Pipe;
 import java.nio.channels.SocketChannel;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -22,6 +23,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,6 +35,7 @@ import org.apache.logging.log4j.core.config.Configurator;
  * @author engin
  */
 public class Env {
+    private static Env instance = null;
     static Connection conn;
     static HashSet<FactoryMember> factories;
     static byte[] lock;
@@ -45,6 +49,7 @@ public class Env {
     private static final long TolerableGap = 2*60*1000;
     private static final long MaxIdleGap = 5*60*1000;
     private static int maxAmount;
+    private Pipe pipe;
     
     static {
         String log4jFile = "/log4j2.xml";
@@ -69,6 +74,7 @@ public class Env {
             //maxAmount = 0;
             factories = new HashSet();
             mapBatch = new HashMap();
+            pipe = Pipe.open();
             lock = new byte[0];
             MysqlProperty sqlArgs = new MysqlProperty(this, "/resource.xml");
             //Class.forName("com.mysql.jdbc.Driver");
@@ -110,6 +116,8 @@ public class Env {
             ps.close();            
         } catch (SQLException ex) {
             logger.fatal(ex);
+        } catch (IOException ex) {
+            logger.fatal("env class open pipe fail.");
         }
         
         maxAmount = 0;
@@ -118,7 +126,12 @@ public class Env {
             maxAmount = maxAmount > fmInverterSize? maxAmount : fmInverterSize;
         }
         
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        es.submit(new SendCmd());
+        
         logger.info(String.format("factory max inverters :%d", maxAmount));
+        
+        instance = this;
     }
     
     Set<FactoryMember> getFactoryMember(){
@@ -130,7 +143,7 @@ public class Env {
         return maxAmount;
     }
     
-    static BatchRecord getBatchRecord(String name){
+    public static BatchRecord getBatchRecord(String name){
         return mapBatch.get(name);
     }
     
@@ -225,5 +238,50 @@ public class Env {
         } catch(IOException e){
             logger.warn("close channel happen error"+ e.getMessage());
         }
+    }
+    
+    public static Env getInstance(){
+        if(instance == null){
+            new Env();
+        }
+        
+        return instance;
+    }
+    
+    public static Logger getlogger(){
+        return getInstance().logger;
+    }
+    
+    public static HashSet<FactoryMember> getFactories(){
+        return getInstance().factories;
+    }
+    
+    public static Connection getConnnection(){
+        return getInstance().conn;
+    }
+    
+    public void writePipe(String msg){
+        ByteBuffer buf = ByteBuffer.wrap(msg.getBytes());
+        try {
+            pipe.sink().write(buf);
+        } catch (IOException ex) {
+            logger.warn("env class function: writePipe, write fail");
+            logger.debug(ex);
+        }
+    }
+    
+    public byte[] readPipe(){
+        ByteBuffer msg = ByteBuffer.allocate(1024);
+        try {
+            pipe.source().read(msg);
+        } catch (IOException ex) {
+            logger.warn("env class function: readPipe, read fail.");
+            logger.debug(ex);
+        }
+        
+        msg.flip();
+        byte[] returnData = new byte[msg.remaining()];
+        msg.get(returnData);
+        return returnData;
     }
 }

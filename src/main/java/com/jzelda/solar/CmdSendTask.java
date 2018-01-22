@@ -24,6 +24,10 @@ import java.util.logging.Logger;
  * @author engin
  */
 public class CmdSendTask extends TimerTask{
+    private final static byte[] SepareateFlag = SendCmd.SepareateFlag;
+    private final static byte[] EndFlag = SendCmd.EndFlag;
+    private final static byte[] MsgTimeDelay = SendCmd.MsgTimeDelay;
+    
     private final long delayTime = 3000;
     private final long tolerableGap = 5*60*1000;
     ByteBuffer cmdComplete;
@@ -63,9 +67,14 @@ public class CmdSendTask extends TimerTask{
         if(Env.factories != null){            
             byte[] cmdArray = getCmd();
             int max = Env.getMAXamount();
+            StringBuilder cmds = new StringBuilder();
             for(int i=1; i<=max; i++){
-                sendCmd(i, cmdArray);
+                cmds.append(createCmd(i, cmdArray));
+                cmds.append(new String(MsgTimeDelay));
+                cmds.append(new String(new byte[]{0x03}));
             }
+            
+            Env.getInstance().writePipe(cmds.toString());
         }
     }
     
@@ -79,7 +88,7 @@ public class CmdSendTask extends TimerTask{
         
         if(hour_int == 1 ){
             Env.logger.info("send cmd is belong get history power");
-            returnData = new byte[]{0x04,0x08,(byte)0x01,0x00,0x02};
+            returnData = new byte[]{0x04,0x08,0x01,0x00,0x02};
             //returnData = new byte[]{0x04,0x08,0x13,0x00,0x02};
         } else{
             holdReg = !holdReg;
@@ -119,7 +128,7 @@ public class CmdSendTask extends TimerTask{
             cmdComplete.put(cmdCpn);
             cmdComplete.flip();
                     
-            byte[] modbus1 = new byte[cmdComplete.limit() - cmdComplete.position()];
+            byte[] modbus1 = new byte[cmdComplete.remaining()];
             cmdComplete.get(modbus1, 0, modbus1.length);
             int crc1 = CRC16_IBM.getCRC(modbus1);
             byte crcH1 = (byte)((crc1 & 0xff00) >> 8);        
@@ -167,4 +176,32 @@ public class CmdSendTask extends TimerTask{
             
     }
     
+    /**
+     * 避免CRC與結束字串重覆
+     * 此方法未計算
+     * @param id inverter id
+     * @param cmdCpn
+     * @return 
+     */
+    private StringBuilder createCmd(int id, byte[] cmdCpn){
+        StringBuilder returnVal = new StringBuilder();
+        for(FactoryMember m : Env.factories){
+            if(id > m.inverterIdList.size())   continue;
+
+            Env.logger.info("create command prefix: "+m.name+" id: "+id);            
+            cmdComplete.clear();
+            cmdComplete.put(m.name.getBytes());
+            cmdComplete.put(SepareateFlag);
+            cmdComplete.put((byte)id);
+            cmdComplete.put(cmdCpn);
+            cmdComplete.put(EndFlag);
+            cmdComplete.flip();
+            byte[] tmp = new byte[cmdComplete.limit() - cmdComplete.position()];
+            cmdComplete.get(tmp, 0, tmp.length);
+            returnVal.append(new String(tmp));
+            
+            Env.getBatchRecord(m.name).startTimer();
+        }
+        return returnVal;
+    }
 }
