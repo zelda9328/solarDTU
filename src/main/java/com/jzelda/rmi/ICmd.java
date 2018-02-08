@@ -13,5 +13,6 @@ import java.rmi.RemoteException;
  * @author engin
  */
 public interface ICmd extends Remote{
-    public void commandCall(String cmd) throws RemoteException;
+    public byte[] listFactory() throws RemoteException;
+    public void get(String[] args) throws RemoteException;
 }

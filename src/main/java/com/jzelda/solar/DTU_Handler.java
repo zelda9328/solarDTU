@@ -42,7 +42,7 @@ public class DTU_Handler implements Runnable{
     final static int YeserdaySize = 19;
     final static int Reg = 21;
     final static int Immediate = 69;
-    final static int DAY30Size = 75;
+    final static int DAY30Size = 139;
     final static byte[] HeartBeatValue = {0x31, 0x32, 0x33};
     final static int ModbusLengPos = 12;
     final static int RegPackLeng = 10;
@@ -55,7 +55,9 @@ public class DTU_Handler implements Runnable{
     SocketChannel socket;
     ByteBuffer buffer, dataBuf;
     String ip;
-    byte[] regName = {0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20};
+    //byte[] regName = {SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, 
+      //  SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy};
+    byte[] regName = createRegName();
     Calendar lastTime;
     
     DTU_Handler(SocketChannel s){
@@ -208,7 +210,14 @@ public class DTU_Handler implements Runnable{
         }
     }
     
-     
+    private static byte[] createRegName(){
+        ByteBuffer buf = ByteBuffer.allocate(10);
+        while(buf.hasRemaining()){
+            buf.put(SendCmd.Vacancy);
+        }
+        
+        return buf.array();
+    }
     
     void save(byte[] data){
         
@@ -345,6 +354,7 @@ public class DTU_Handler implements Runnable{
                 
             default:
                 dataModel = new UnDefined();
+                Env.logger.debug("The UnDefined class length is: " + data.length);
                 break;
         }
         

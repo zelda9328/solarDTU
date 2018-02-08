@@ -21,6 +21,7 @@ public class SendCmd implements Runnable{
     public final static byte[] SepareateFlag = {0x7d,0x7d,0x7d,0x7d};
     public final static byte[] EndFlag = {0x7f,0x7f,0x7f,0x7f};
     public final static byte[] MsgTimeDelay = {0x7e,0x7e,0x7e};
+    public final static byte Vacancy = 0x20;
     private ByteBuffer bf;
 
     //至此，待發送的指令格式應為

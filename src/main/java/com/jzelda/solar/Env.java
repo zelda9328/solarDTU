@@ -5,19 +5,26 @@
  */
 package com.jzelda.solar;
 import com.jzelda.math.crc.CRC16_IBM;
+import com.jzelda.rmi.CmdImpl;
+import com.jzelda.rmi.ICmd;
+import com.jzelda.solar.pattern.Convert;
 import com.jzelda.util.MysqlProperty;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.rmi.AlreadyBoundException;
 import java.nio.channels.Pipe;
 import java.nio.channels.SocketChannel;
+import java.rmi.Naming;
+import java.rmi.registry.LocateRegistry;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +50,7 @@ public class Env {
     final static int DelayUnit = 1000;
     final static int cmdSendPeriod = 60;
     final static byte[] cmdPattern = {0x04, 0x04, (byte)0x1f, 0x00, 0x03};
+    final static int RMIPort = 1099;
     
     static Map<String, BatchRecord> mapBatch;
     static Set<DTU_Handler> connectionManager;
@@ -77,7 +85,7 @@ public class Env {
             pipe = Pipe.open();
             lock = new byte[0];
             MysqlProperty sqlArgs = new MysqlProperty(this, "/resource.xml");
-            //Class.forName("com.mysql.jdbc.Driver");
+            //Class.forName("com.mysql.jdbc.Driver");            
             conn = DriverManager.getConnection(sqlArgs.connectArgs, sqlArgs.user, sqlArgs.passwd);
             conn.setAutoCommit(false);
             
@@ -113,11 +121,19 @@ public class Env {
                 
             }
             rs.close();
-            ps.close();            
+            ps.close();
+            
+            LocateRegistry.createRegistry(RMIPort);
+            ICmd rmiCmd = new CmdImpl();
+            Naming.bind("rmi://localhost/cmd", rmiCmd);
+            logger.info("rmi binding successful.");
         } catch (SQLException ex) {
             logger.fatal(ex);
         } catch (IOException ex) {
-            logger.fatal("env class open pipe fail.");
+            logger.fatal("env class open pipe fail or RMI.");
+            logger.fatal(ex.getMessage());
+        } catch (AlreadyBoundException bound){
+            logger.fatal("RMI has binding, can't create again.");
         }
         
         maxAmount = 0;
@@ -261,7 +277,12 @@ public class Env {
     }
     
     public void writePipe(String msg){
-        ByteBuffer buf = ByteBuffer.wrap(msg.getBytes());
+        writePipe(msg.getBytes());
+        
+    }
+    
+    public void writePipe(byte[] cmdset){
+        ByteBuffer buf = ByteBuffer.wrap(cmdset);
         try {
             pipe.sink().write(buf);
         } catch (IOException ex) {

@@ -62,7 +62,9 @@ public class BatchRecord extends TimerTask {
                 break;
                 
             case "Day30":
-                
+                sql = "insert into historyPow(no, power, date) "
+                        + "select ?,?,? from dual where ? not in "
+                        + "(select date_format(date, \"%Y/%m/%d\") from historyPow where no=?)";
                 break;
                 
             case "Immediate":
@@ -81,11 +83,10 @@ public class BatchRecord extends TimerTask {
         
         Calendar cal = Calendar.getInstance();
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
-        String date_str  = sdf.format(cal.getTime());
         
         try (PreparedStatement ps = Env.conn.prepareStatement(storeSql)){
             for(int i=0; i<data.length; i++){
-                cal.add(Calendar.DATE, -1);
+                String date_str  = sdf.format(cal.getTime());
                 
                 int x = 4;
                 int y = 0;
@@ -100,6 +101,8 @@ public class BatchRecord extends TimerTask {
                 
                 ps.execute();
                 Env.conn.commit();
+                
+                cal.add(Calendar.DATE, -1);
             }
         } catch (SQLException ex) {
             Env.logger.warn("sql execute error, message: " + ex.getMessage());

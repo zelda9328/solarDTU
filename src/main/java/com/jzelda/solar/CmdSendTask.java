@@ -63,7 +63,7 @@ public class CmdSendTask extends TimerTask{
             }
         }
         */
-        Env.logger.info("execute cmd send");
+        Env.logger.info("execute cmd schedule createor");
         if(Env.factories != null){            
             byte[] cmdArray = getCmd();
             int max = Env.getMAXamount();

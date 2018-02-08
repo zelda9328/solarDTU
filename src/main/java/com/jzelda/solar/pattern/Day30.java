@@ -20,7 +20,7 @@ import java.util.stream.Stream;
  * @author engin
  */
 public class Day30 extends DeltaInverterModbus{
-    int[] powerDay30 = new int[30];
+    int[] powerDay30 = new int[31];
 
     public void toSave() {
         String sql = "insert into historyPow(no, power) "

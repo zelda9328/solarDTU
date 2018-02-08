@@ -34,4 +34,8 @@ public class FactoryMember {
     public String getName(){
         return name;
     }
+    
+    public int getInverterAmount(){
+        return inverterIdList.size();
+    }
 }
