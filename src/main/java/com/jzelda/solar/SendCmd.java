@@ -41,7 +41,6 @@ public class SendCmd implements Runnable{
             int firstPos = msg_str.indexOf(new String(MsgTimeDelay));
             String timeDelay_str = msg_str.substring(firstPos, firstPos + MsgTimeDelay.length +1 );
             char sleepTime = timeDelay_str.charAt(timeDelay_str.length()-1);
-            //String sp = String.format("%s%c", timeDelay_str, sleepTime);
             
             String[] modbusCmds = msg_str.split(timeDelay_str);
             Env.logger.info(Convert.toStringType(modbusCmds[0].getBytes()));
@@ -53,9 +52,6 @@ public class SendCmd implements Runnable{
                     Logger.getLogger(SendCmd.class.getName()).log(Level.SEVERE, null, ex);
                 }
             }
-            
-//            String[] modbusSets = msg_str.split(new String(CmdSendTask.MsgTimeDelay));
-            
         }
     }
     
@@ -90,5 +86,4 @@ public class SendCmd implements Runnable{
             }
         }
     }
-    
 }

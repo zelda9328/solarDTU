@@ -7,7 +7,7 @@ and open the template in the editor.
 <!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
 <properties>
 <comment>storeToXML</comment>
-<entry key="host">192.168.0.171</entry>
+<entry key="host">localhost</entry>
 <entry key="dbname">solar</entry>
 <entry key="user">root</entry>
 <entry key="passwd">89E2EXXoH0eHfvsjtqGj/w==</entry>

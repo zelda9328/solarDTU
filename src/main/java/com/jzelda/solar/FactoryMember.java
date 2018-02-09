@@ -24,6 +24,11 @@ public class FactoryMember {
         inverterIdList = new ArrayList();
     }
     
+    /**
+     * 找出inverter id對應的DB編號
+     * @param id
+     * @return 
+     */
     public int mapId(int id){
         if(id <= inverterIdList.size())
             return inverterIdList.get(id -1);

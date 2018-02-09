@@ -47,22 +47,18 @@ public class Usr implements Runnable{
     static Selector selector;
     final int port = 30001;
     
-    List<DTU_Handler> DTU_List;
     Env env;
     Timer timer;
     TimerTask cmdsend;
     
     Usr() throws IOException{
         env = new Env();
-        DTU_List = new ArrayList<DTU_Handler>();
         sktChannel = ServerSocketChannel.open();
         sktChannel.socket().bind(new InetSocketAddress(port));
         sktChannel.configureBlocking(false);
         
         selector = Selector.open();
         sktChannel.register(selector, SelectionKey.OP_ACCEPT).attach(new Acceptor(this));
-        
-        DataParse checker = new DataParse();
     }
     
     static public Selector getSelector(){
@@ -71,7 +67,6 @@ public class Usr implements Runnable{
     
     public void run(){
         try {
-            //new Timer().schedule(new CmdSendTask(), 60*1000, 60*1000);
             ScheduledExecutorService service = Executors.newScheduledThreadPool(1);
             service.scheduleAtFixedRate(new CmdSendTask(), Env.cmdSendPeriod, 60, TimeUnit.SECONDS);
             while(!Thread.interrupted()){
@@ -94,7 +89,6 @@ public class Usr implements Runnable{
     
     void dispatch(SelectionKey key){
         Runnable r = (Runnable)key.attachment();
-        SelectableChannel cl = key.channel();
         if (!key.isValid()){
             Env.logger.info("trigger selector: key is not valid.");
             key.cancel();

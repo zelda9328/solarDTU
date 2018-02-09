@@ -7,12 +7,9 @@ package com.jzelda.solar;
 import com.jzelda.math.crc.CRC16_IBM;
 import com.jzelda.rmi.CmdImpl;
 import com.jzelda.rmi.ICmd;
-import com.jzelda.solar.pattern.Convert;
 import com.jzelda.util.MysqlProperty;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.rmi.AlreadyBoundException;
 import java.nio.channels.Pipe;
@@ -24,7 +21,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,14 +59,11 @@ public class Env {
         String log4jFile = "/log4j2.xml";
         //URL url = Env.class.getResource(log4jFile);
         InputStream in = Env.class.getResourceAsStream(log4jFile);
-              //  System.out.println(in);
         try{
             ConfigurationSource cs = new ConfigurationSource(in);
             Configurator.initialize(null, cs);
         } catch (IOException e){
-            //java.util.logging.Logger.getLogger(Env.class.getName()).log(Level.SEVERE, "read log4j2.xml fail");
             java.util.logging.Logger.getLogger(Env.class.getName()).log(Level.SEVERE, null, e);
-            //System.exit(1);
         }
         
         logger = LogManager.getLogger();
@@ -79,7 +72,6 @@ public class Env {
     
     Env(){
         try {
-            //maxAmount = 0;
             factories = new HashSet();
             mapBatch = new HashMap();
             pipe = Pipe.open();
@@ -89,9 +81,6 @@ public class Env {
             conn = DriverManager.getConnection(sqlArgs.connectArgs, sqlArgs.user, sqlArgs.passwd);
             conn.setAutoCommit(false);
             
-            //String sql_getRelation = "select name,count(sn) from inverter"
-            //        + " join factory where inverter.appertain=factory.no group by appertain";
-            //String sql_getRelation = "select name,count(sn),sn-1 as sn from "
             String sql_getRelation = "select name,inverter.no ,appertain from inverter join factory "
                     + "where inverter.appertain=factory.no order by appertain, inverter.sn";
             PreparedStatement ps = conn.prepareStatement(sql_getRelation);
@@ -118,7 +107,6 @@ public class Env {
                     factories.add(member);
                     mapBatch.put(member.name, new BatchRecord(member));
                 }
-                
             }
             rs.close();
             ps.close();
@@ -136,6 +124,7 @@ public class Env {
             logger.fatal("RMI has binding, can't create again.");
         }
         
+        //this variable support to CmdSendTask to do max id loop
         maxAmount = 0;
         for(FactoryMember fm : factories){
             int fmInverterSize = fm.inverterIdList.size();
@@ -154,7 +143,6 @@ public class Env {
         return factories;
     }
     
-    
     static int getMAXamount(){
         return maxAmount;
     }
@@ -163,6 +151,11 @@ public class Env {
         return mapBatch.get(name);
     }
     
+    /**
+     * socket連線一建立,call this method
+     * 請對方送特定碼長做為註冊
+     * @param socket 
+     */
     static void queryReg(SocketChannel socket){
         ByteBuffer cmdComplete = ByteBuffer.allocate(cmdPattern.length+3);
         cmdComplete.clear();
