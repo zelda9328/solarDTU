@@ -6,21 +6,16 @@
 package com.jzelda.solar;
 
 import com.jzelda.math.crc.CRC16_IBM;
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Date;
-import java.util.Set;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- *
+ * 指令產生器
  * @author engin
  */
 public class CmdSendTask extends TimerTask{
@@ -29,7 +24,6 @@ public class CmdSendTask extends TimerTask{
     private final static byte[] MsgTimeDelay = SendCmd.MsgTimeDelay;
     
     private final long delayTime = 3000;
-    private final long tolerableGap = 5*60*1000;
     ByteBuffer cmdComplete;
     Boolean holdReg;
     byte volType;
@@ -44,25 +38,7 @@ public class CmdSendTask extends TimerTask{
     @Override
     public void run() {
         Env.checkIdleConnection();
-        /*
-        Set<SelectionKey> skey = Usr.getSelector().keys();
-        Calendar nowTime = Calendar.getInstance();
-        Env.logger.info("ready to check idle connection");
-        for(SelectionKey k : skey){
-            Object o = k.attachment();
-            if(o instanceof DTU_Handler){
-                Calendar lastTime = ((DTU_Handler) o).lastTime;
-                long gap = nowTime.getTimeInMillis() - lastTime.getTimeInMillis();
-                if(gap > tolerableGap){
-                    try {
-                        ((DTU_Handler) o).socket.close();
-                    } catch (IOException ex) {
-                        Env.logger.warn("can't close unexpected socket");
-                    }
-                }
-            }
-        }
-        */
+        
         Env.logger.info("execute cmd schedule createor");
         if(Env.factories != null){            
             byte[] cmdArray = getCmd();
@@ -89,7 +65,6 @@ public class CmdSendTask extends TimerTask{
         if(hour_int == 1 ){
             Env.logger.info("send cmd is belong get history power");
             returnData = new byte[]{0x04,0x08,0x01,0x00,0x02};
-            //returnData = new byte[]{0x04,0x08,0x13,0x00,0x02};
         } else{
             holdReg = !holdReg;
             if(holdReg){
@@ -117,6 +92,11 @@ public class CmdSendTask extends TimerTask{
         return returnData;
     }
     
+    /**
+     * @deprecated 
+     * @param id
+     * @param cmdCpn 
+     */
     private void sendCmd(int id, byte[] cmdCpn){
         for(FactoryMember m : Env.factories){
             if(id > m.inverterIdList.size())   continue;
@@ -164,7 +144,7 @@ public class CmdSendTask extends TimerTask{
                 }
             }
             */
-            if(isComplete)  Env.getBatchRecord(m.name).startTimer();
+            //if(isComplete)  Env.getBatchRecord(m.name).startTimer();
             
             try {
                 Thread.sleep(delayTime);
@@ -200,7 +180,7 @@ public class CmdSendTask extends TimerTask{
             cmdComplete.get(tmp, 0, tmp.length);
             returnVal.append(new String(tmp));
             
-            Env.getBatchRecord(m.name).startTimer();
+            //Env.getBatchRecord(m.name).startTimer();
         }
         return returnVal;
     }
