@@ -6,29 +6,21 @@
 package com.jzelda.solar;
 
 import com.jzelda.solar.pattern.DataModel;
-import com.jzelda.solar.pattern.Day1;
 import com.jzelda.solar.pattern.DeltaInverterModbus;
 import com.jzelda.solar.pattern.Immediate;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Collection;
-import java.util.Date;
 import java.util.HashMap;;
 import java.util.Map;
-import java.util.Optional;
 import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Stream;
 
 /**
- *
+ * 發電資料寫入DB
  * @author engin
  */
 public class BatchRecord extends TimerTask {
@@ -93,6 +85,7 @@ public class BatchRecord extends TimerTask {
                 ps.setObject(1, model.getInverterNo());
                 ps.setObject(2, data[i]);
                 ps.setObject(3, date_str);
+                //30天資料要帶日期
                 if(model.getClass().getSimpleName().equals("Day30")){
                     y =1;
                     ps.setObject(x, date_str);
@@ -107,13 +100,9 @@ public class BatchRecord extends TimerTask {
         } catch (SQLException ex) {
             Env.logger.warn("sql execute error, message: " + ex.getMessage());
         }
-        
-        
-        
-        
     }
     
-    public void addElements(Object[] o){
+    private void addElements(Object[] o){
         if(o.length != dbStructFields){
             Env.logger.warn("data length waiting write into DB is not correct.");
             return;
@@ -143,25 +132,21 @@ public class BatchRecord extends TimerTask {
                 }
                 if( hold == 48 && i == 3){
                     i+=2;
-                    //continue;
                 }
                 if( hold == 0 && i == 1){
                     i+=2;
-                    //continue;
                 }
                 newArray[i] = o[it];
                 i++;
             }
             elements.put((Integer)o[0], newArray);
         }
-        /*
-        if(elements.size() == amount){
-            Env.logger.info(name + " BatchRecord has max amount, execute run()");
-            run();
-        }
-        */
     }
     
+    /**
+     * 傳入資料並寫入DB
+     * @param model 
+     */
     public void addElements(DataModel model){
         String classType = model.getClass().getSimpleName();
         
@@ -180,6 +165,7 @@ public class BatchRecord extends TimerTask {
                 Object[] obj = immediate.getDataSet();                
                 obj[0] = id;                
                 addElements( obj );
+                startTimer();
                 break;
                 
             case "UnDefined":
@@ -187,7 +173,7 @@ public class BatchRecord extends TimerTask {
         }
     }
     
-    void batchWrite(){        
+    private void batchWrite(){        
         if(elements.size() == 0){
             isset = false;
             return;
@@ -222,7 +208,10 @@ public class BatchRecord extends TimerTask {
         isset = false;
     }
     
-    void startTimer(){
+    /**
+     * 搭配addElements(Object[] o),做交直流一併寫入
+     */
+    private void startTimer(){
         synchronized(this){
             if(isset){
                 Env.logger.info(name + " timer has setting.");
