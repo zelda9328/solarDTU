@@ -55,8 +55,6 @@ public class DTU_Handler implements Runnable{
     SocketChannel socket;
     ByteBuffer buffer, dataBuf;
     String ip;
-    //byte[] regName = {SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, 
-      //  SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy, SendCmd.Vacancy};
     byte[] regName = createRegName();
     Calendar lastTime;
     
@@ -79,6 +77,7 @@ public class DTU_Handler implements Runnable{
     public void run(){
         Calendar nowTime = Calendar.getInstance();
         long timeGap = nowTime.getTimeInMillis() - lastTime.getTimeInMillis();
+        //限定資料保存時限
         if(timeGap > CmdExpired){
             dataBuf.clear();
         }
@@ -93,6 +92,7 @@ public class DTU_Handler implements Runnable{
         
         Env.logger.debug(String.format("receive socket channel data: %s", Convert.toStringType(data)));
         
+        //資料超過0x7f,直接轉字串會被換成0x3f,用16進制字串處理
         String msgHex = DatatypeConverter.printHexBinary(data);
         String trimFlag = DatatypeConverter.printHexBinary(regName);
         String[] trimReg = msgHex.split(trimFlag);
@@ -145,37 +145,6 @@ public class DTU_Handler implements Runnable{
         Env.getBatchRecord(factoryName).addElements(model);
     }
     
-    public void run1() {
-        try{
-            int n = socket.read(buffer);
-            if(n == -1){
-                try {
-                    Env.logger.info("client send close request.");
-                    finalize();
-                } catch (Throwable ex) {
-                    Logger.getLogger(DTU_Handler.class.getName()).log(Level.SEVERE, null, ex);
-                }
-                return;
-            }
-            buffer.flip();
-        
-            int bufferLeng = buffer.limit();
-            byte[] data = new byte[bufferLeng];
-            buffer.get(data, 0, bufferLeng);
-            buffer.clear();
-            save(data);
-            
-        } catch (IOException ex) {
-            Env.logger.warn("io error: "+ex.getMessage());
-            try {
-                Env.logger.info("close the socket.");
-                finalize();
-            } catch (Throwable ex1) {
-                Logger.getLogger(DTU_Handler.class.getName()).log(Level.SEVERE, null, ex1);
-            }
-        }
-        
-    }
     void packingRelation(String name){
         if(Env.factories != null){
             for(FactoryMember m : Env.factories){
@@ -209,7 +178,7 @@ public class DTU_Handler implements Runnable{
             }
         }
     }
-    
+   
     private static byte[] createRegName(){
         ByteBuffer buf = ByteBuffer.allocate(10);
         while(buf.hasRemaining()){
@@ -217,111 +186,6 @@ public class DTU_Handler implements Runnable{
         }
         
         return buf.array();
-    }
-    
-    void save(byte[] data){
-        
-        
-        lastTime = Calendar.getInstance();        
-        
-        
-        
-        
-    }
-    
-    private void savePowerData(byte[] pow, int id, String name){
-        String msg = String.format("receive data length is %d", pow.length);
-        Env.logger.info(msg);
-        String sql;
-        SimpleDateFormat sdf;
-        switch(pow.length){
-            case 54:
-                //int vol = byte2int(pow[0], pow[1]);
-                //int cur = byte2int(pow[2], pow[3]);
-                //int watt = byte2int(pow[4], pow[5]);
-                int hold = byte2int(pow[0], pow[1]);
-                BigDecimal a = new BigDecimal(byte2int(pow[2], pow[3]));
-                BigDecimal b = new BigDecimal("0.1");
-                float vol = a.multiply(b).floatValue();
-                a = new BigDecimal(byte2int(pow[4], pow[5]));
-                b = new BigDecimal("0.01");
-                float cur = a.multiply(b).floatValue();
-                int watt = byte2int(pow[6], pow[7]);
-                a = new BigDecimal(byte2int(pow[8], pow[9]));
-                float freq = a.multiply(b).floatValue();
-                
-                byte[] powdata = {pow[32], pow[33], pow[34], pow[35]};
-                int powInt = count2fieldPow(powdata)*10;
-                int ampTemp = byte2int(pow[48], pow[49]);
-                int boostHsTemp = byte2int(pow[50], pow[51]);
-                int invHsTemp = byte2int(pow[52], pow[53]);
-                Env.logger.info("hold is " + hold);
-                Env.logger.info("vol is " + vol);
-                Env.logger.info("cur is " + cur);
-                Env.logger.info("watt is " + watt);
-                Env.logger.info("freq is " + freq);
-                Env.logger.info("watt until now is " + powInt);
-                Env.logger.info("ampTemp is " + ampTemp);
-                Env.logger.info("boostHsTemp is " + boostHsTemp);
-                Env.logger.info("invHsTemp is " + invHsTemp);
-                
-                Object[] values = {id, hold, vol, cur, watt, freq, powInt, ampTemp, boostHsTemp,invHsTemp};
-                Env.getBatchRecord(name).addElements(values);
-                break;
-                
-            case 4:
-                int sum = count2fieldPow(pow);
-                Env.logger.info("yesterday power is: "+sum);
-                
-                sql = "insert into historyPow(no, power) "
-                        + "select ?,? from dual where ? not in "
-                        + "(select date_format(date, \"%Y/%m/%d\") from historyPow where no=?)";
-                sdf = new SimpleDateFormat("yyyy/MM/dd");
-                Calendar cal = Calendar.getInstance();
-                //cal.add(Calendar.DATE, -12);
-                String recDate = sdf.format(cal.getTime());
-
-                try (PreparedStatement ps = Env.conn.prepareStatement(sql);){
-                    ps.setInt(1, id);
-                    ps.setInt(2,(int)sum);
-                    ps.setString(3, recDate);
-                    ps.setInt(4, id);
-                    ps.execute();
-                    Env.conn.commit();
-                } catch (SQLException ex) {
-                    Env.logger.warn("sql execute error, message: " + ex.getMessage());
-                }
-                break;
-        }
-    }
-    
-    private int byte2int(byte high, byte low){
-        int high_int = (int)(high & 0xff) << 8;
-        int low_int = (int)(low & 0xff);
-        return high_int + low_int;
-    }
-    /*
-    private int bcd2int(byte high, byte low){
-        int higt_int = (high & 0xf0 >> 4)*10 + high & 0x0f;
-        int low_int = (low & 0xf0 >> 4)*10 + low & 0x0f;
-        
-        return high*100 + low;
-    }
-    */
-    private int count2fieldPow(byte[] pow){
-        double sum=0;
-        if(pow.length != 4){
-            String msg = String.format("argv length is not match in %s", this.getClass().getName());
-            Env.logger.warn(msg);
-        }
-        for(int i=1; i<pow.length;i+=2){
-            String msg = String.format("socket power data; %s %S", Convert.toHex(pow[i]), Convert.toHex(pow[i-1]));
-            Env.logger.info(msg);
-            double rate = Math.pow(16, (i-1)*2);
-            sum += (Byte.toUnsignedInt(pow[i]))* rate;
-            sum += (Byte.toUnsignedInt(pow[i-1]))* rate * 16*16;
-        }
-        return (int)sum;
     }
     
     private DataModel getDataModel(byte[] data){
